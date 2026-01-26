@@ -38,6 +38,29 @@ set dmp=xxx.dump
 ::docker exec -it %name% psql -U %usr% -d %pgdb% -c "\d xxx" && ( pause ) || ( pause )
 
 
+:: (5) query optimization
 
+:: CREATE TABLE telemetry (
+::    time        TIMESTAMPTZ NOT NULL,
+::    sensor_id   INTEGER NOT NULL,
+::    value       DOUBLE PRECISION
+:: );
+:: SELECT create_hypertable('telemetry', 'time');
+:: SELECT * FROM telemetry WHERE time >= '2026-01-01 00:00:00' AND time <= '2026-01-31 23:59:59';
 
+:: SELECT date_trunc('day', time) as d ... OR
+:: SELECT time_bucket('1 day', time) as d, sensor_id, COUNT(*) as cnt, AVG(value) as avg_val, stddev(value) as tddev_val
+:: FROM telemetry WHERE time >= '..' AND time <= '..' GROUP BY d, sensor_id HAVING stddev(value) > 2 ORDER BY d, sensor_id;
 
+:: CREATE MATERIALIZED VIEW ts_daily_stats WITH (timescaledb.continuous) AS
+:: SELECT time_bucket('1 day', time) as d, sensor_id, AVG(value) as avg, MIN(value) as min, MAX(value) as max, COUNT(*) as cnt
+:: FROM telemetry GROUP BY d, sensor_id; 
+:: -- automatic refresh policy
+:: SELECT add_continuous_aggregate_policy('ts_daily_stats', start_offset => INTERVAL '3 days', end_offset => INTERVAL '1 hour', schedule_interval => INTERVAL '1 hour');
+:: SELECT * FROM ts_daily_stats WHERE day >= '..' AND day <= '..' ORDER BY day, sensor_id;
+
+:: SELECT pg_total_relation_size('telemetry')/1024/1024 as size_mb;
+:: SELECT hypertable_size('telemetry')/1024/1024 as size_mb;
+:: ALTER TABLE telemetry SET (timescaledb.compress, timescaledb.compress_segmentby = 'sensor_id', timescaledb.compress_orderby='time');
+:: SELECT add_compression_policy('telemetry', INTERVAL '7 days');
+:: SELECT hypertable_size('telemetry')/1024/1024 as size_mb;
